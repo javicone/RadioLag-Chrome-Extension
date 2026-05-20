@@ -25,6 +25,17 @@ Extensión de Chrome que reproduce emisoras de radio en vivo en cualquier págin
 5. Usa el **slider de retraso** (0-180s) para sincronizar con el vídeo
 6. El LED rojo pulsa cuando está reproduciendo
 
+## Capturas de pantalla
+
+### Selector de emisoras
+![Selector de emisoras](images/radios_select.png)
+
+### Reproduciendo
+![Reproduciendo](images/radio_play.png)
+
+### Vista general
+![Vista general](images/overlay.png)
+
 ## Funcionalidades
 
 ### Silenciado automático
