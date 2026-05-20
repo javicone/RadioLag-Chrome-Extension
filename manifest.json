@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Radio Sync - Cadena SER",
+  "name": "Radio Sync",
   "version": "1.0",
-  "description": "Reproduce la Cadena SER en cualquier página y sincronízala con el vídeo.",
+  "description": "Reproduce emisoras de radio en vivo en cualquier página web con control de retraso para sincronizar con contenido de vídeo.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://*/*",
@@ -11,8 +11,13 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"]
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css"],
+      "matches": ["https://*/*", "http://*/*"]
     }
   ],
   "icons": {

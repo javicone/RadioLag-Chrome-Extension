@@ -17,7 +17,7 @@ const STATIONS = {
     id: 'cope',
     name: 'COPE',
     shortName: 'COPE',
-    streamUrl: '',
+    streamUrl: 'https://net2-cope-flucast.flumotion.com/cope/net2.mp3.m3u?referrer_url=https%3A%2F%2Fwww.cope.es%2Femisoras&player_type=web&domain=www.cope.es',
     color: '#1a5276',
     colorHover: '#154360',
     colorPlaying: '#28a745',
@@ -78,6 +78,23 @@ const updateControlPanel = () => {
   updateFloatingButton();
 };
 
+const resolveStreamUrl = async (url) => {
+  if (!url) return url;
+  if (!/\.m3u8?(\?|$)/i.test(url)) return url;
+
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return url;
+    const text = await res.text();
+    const lines = text.split(/\r?\n/).map((line) => line.trim());
+    const target = lines.find((line) => line && !line.startsWith('#'));
+    if (!target) return url;
+    return new URL(target, url).toString();
+  } catch (_) {
+    return url;
+  }
+};
+
 // ============================================================
 // AUDIO — GESTIÓN DEL GRAPO
 // ============================================================
@@ -97,7 +114,7 @@ const destroyAudioGraph = () => {
   useWebAudioAPI = false;
 };
 
-const createRadioAudio = (stationId) => {
+const createRadioAudio = async (stationId) => {
   destroyAudioGraph();
 
   if (radioAudio) {
@@ -130,7 +147,8 @@ const createRadioAudio = (stationId) => {
     updateStatus('Reconectando...');
   });
 
-  radioAudio.src = station.streamUrl;
+  const resolvedUrl = await resolveStreamUrl(station.streamUrl);
+  radioAudio.src = resolvedUrl || station.streamUrl;
   radioAudio.load();
 
   return radioAudio;
@@ -208,7 +226,7 @@ const mutePageMedia = (mute = true) => {
 // ============================================================
 // CAMBIO DE EMISORA EN CALIENTE
 // ============================================================
-const switchStation = (newStationId) => {
+const switchStation = async (newStationId) => {
   const wasPlaying = isPlaying;
   const delaySlider = shadowRoot?.getElementById('delay-slider');
   const delayVal = delaySlider ? parseFloat(delaySlider.value) : 0;
@@ -221,7 +239,7 @@ const switchStation = (newStationId) => {
 
   // 4. Crear nuevo Audio con el nuevo stream URL
   currentStation = newStationId;
-  createRadioAudio(newStationId);
+  await createRadioAudio(newStationId);
 
   // 5. Restaurar delay si estaba activo
   if (delayVal > 0) {
@@ -234,9 +252,8 @@ const switchStation = (newStationId) => {
   const led = shadowRoot?.getElementById('radio-led');
   if (led) led.classList.toggle('active', wasPlaying);
   if (wasPlaying) {
-    resumeAudioContext().then(() => {
-      radioAudio.play().catch((e) => console.error('[Radio] Error al reanudar:', e));
-    });
+    await resumeAudioContext();
+    radioAudio.play().catch((e) => console.error('[Radio] Error al reanudar:', e));
   }
 
   updateFloatingButton();
@@ -379,13 +396,13 @@ const init = () => {
 
   // Selector de emisoras
   selectorPanel.querySelectorAll('.station-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const stationId = btn.dataset.station;
       if (currentStation && currentStation !== stationId) {
-        switchStation(stationId);
+        await switchStation(stationId);
       } else {
         currentStation = stationId;
-        createRadioAudio(stationId);
+        await createRadioAudio(stationId);
       }
       showControlPanel();
     });

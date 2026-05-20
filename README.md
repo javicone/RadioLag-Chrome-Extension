@@ -1,62 +1,78 @@
-# Radio Sync - Cadena SER
+# Radio Sync
 
-Extensión de Chrome que te permite escuchar la Cadena SER en cualquier página web y sincronizar el audio con el contenido de vídeo.
+Extensión de Chrome que reproduce emisoras de radio en vivo en cualquier página web y sincroniza el audio con contenido de vídeo mediante control de retraso.
 
-## 🚀 Instalación
+## Emisoras disponibles
+
+- **Cadena SER** — stream en directo (StreamTheWorld CDN)
+- **COPE** — stream en directo (Flumotion CDN)
+
+## Instalación
 
 1. Abre Chrome y ve a `chrome://extensions/`
-2. Activa el **"Modo de desarrollador"** (esquina superior derecha)
-3. Haz clic en **"Cargar extensión sin empaquetar"**
-4. Selecciona la carpeta `radio-sync-extension`
-5. ¡Listo! La extensión estará instalada
+2. Activa el **Modo de desarrollador**
+3. Haz clic en **Cargar extensión sin empaquetar**
+4. Selecciona la carpeta del proyecto
+5. ¡Listo!
 
-## 📻 Cómo usar
+## Cómo usar
 
-1. **Navega a cualquier página web** (YouTube, Twitch, DAZN, etc.)
-2. Verás un **botón rojo flotante** con el icono de radio y el texto "SER" en la esquina inferior derecha
-3. **Haz clic en el botón** para activar la radio
-4. Se abrirá un panel de control con:
-   - Badge "EN VIVO" 
-   - Botón de **Reproducir/Pausar**
-   - **Slider de retraso** (0-180 segundos)
-   - Botón de **Cerrar**
+1. Navega a cualquier página web
+2. Verás un **botón flotante** en la esquina inferior derecha
+3. Haz clic para abrir el **selector de emisoras**
+4. Elige SER o COPE
+5. Usa el **slider de retraso** (0-180s) para sincronizar con el vídeo
+6. El LED rojo pulsa cuando está reproduciendo
 
-## ⚙️ Funcionalidades
+## Funcionalidades
 
-### 🔇 Silenciado automático
-- Al activar la radio, la extensión **silencia automáticamente** todos los elementos `<audio>` y `<video>` de la página
-- Cuando cierras la radio, restaura el audio original
+### Silenciado automático
+Al reproducir la radio, silencia todos los `<audio>` y `<video>` de la página. Al pausar, restaura el audio original. Incluye `MutationObserver` para medios dinámicos (Twitch, etc.).
 
-### ⏱️ Sincronización con delay
-- Usa el **slider de retraso** para ajustar el audio de la radio
-- Rango: **0 a 180 segundos** (3 minutos)
-- Útil para sincronizar con streams de vídeo que tienen retraso
+### Sincronización con delay
+- Slider de 0 a 180 segundos (paso 0.1s)
+- Usa Web Audio API (`DelayNode`) solo cuando delay > 0
+- No recarga el stream al activar el delay
+- Reintento automático si falla la configuración
 
-### 📍 Botón flotante fijo
-- El botón permanece visible en la **esquina inferior derecha**
-- Funciona en **todas las páginas web** que visites
-- Interfaz con Bootstrap moderna y responsive
+### Diseño vintage
+- Paleta crema, madera y latón
+- Tipografía Playfair Display + Georgia
+- LED rojo pulsante con glow
+- Slider estilo radio antigua
 
-## 🎯 Casos de uso
+### Cambio de emisora en caliente
+Cambia entre SER y COPE sin recargar la página. El audio se pausa, limpia, y reanuda automáticamente.
 
-- Ver partidos de fútbol en streaming y escuchar la narración de la SER
-- Sincronizar eventos deportivos en directo
-- Escuchar la radio mientras navegas por cualquier sitio
+### Resolución automática de streams
+Resuelve archivos `.m3u` automáticamente para obtener la URL directa del stream.
 
-## 🛠️ Tecnologías
+## Tecnologías
 
-- **Web Audio API** para procesamiento de audio
-- **Bootstrap 5** para la interfaz
-- **Manifest V3** de Chrome Extensions
-- **DelayNode** para la sincronización temporal
+- Manifest V3
+- Web Audio API (DelayNode, AudioContext)
+- Shadow DOM
+- Google Fonts (Playfair Display)
+- Playwright (tests)
 
-## 📝 Notas
+## Archivos
 
-- La extensión usa el stream directo de la Cadena SER
-- El audio se transmite con CORS habilitado
-- Compatible con Chrome y navegadores basados en Chromium
+```
+├── manifest.json
+├── content.js          # Lógica y UI (Shadow DOM)
+├── styles.css          # Estilos vintage
+├── icons/
+│   ├── icon16.png
+│   └── icon48.png
+├── tests/
+│   ├── extension.spec.js
+│   └── test-page.html
+├── SPECS.md
+├── package.json
+└── playwright.config.js
+```
 
 ---
 
-**Stream**: Cadena SER (StreamTheWorld CDN)  
+**Streams**: Cadena SER (StreamTheWorld), COPE (Flumotion)  
 **Versión**: 1.0
