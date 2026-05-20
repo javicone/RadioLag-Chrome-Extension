@@ -125,7 +125,6 @@ const createRadioAudio = async (stationId) => {
 
   const station = STATIONS[stationId];
   radioAudio = new Audio();
-  radioAudio.crossOrigin = 'anonymous';
 
   radioAudio.addEventListener('error', () => {
     console.error(`[Radio ${station.shortName}] Error de audio:`, radioAudio.error?.message || 'desconocido');
