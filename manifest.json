@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Radio Sync",
+  "name": "RadioLag",
   "version": "1.0",
   "description": "Reproduce emisoras de radio en vivo en cualquier página web con control de retraso para sincronizar con contenido de vídeo.",
   "permissions": ["storage", "activeTab"],

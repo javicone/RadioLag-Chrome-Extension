@@ -9,10 +9,10 @@ const TEST_PAGE_PATH = path.join(EXTENSION_PATH, 'tests', 'test-page.html');
 
 // Write a minimal test page so the extension can inject into it
 if (!fs.existsSync(TEST_PAGE_PATH)) {
-  fs.writeFileSync(TEST_PAGE_PATH, '<html><head><meta charset="utf-8"></head><body><h1>Radio Sync Test</h1></body></html>');
+  fs.writeFileSync(TEST_PAGE_PATH, '<html><head><meta charset="utf-8"></head><body><h1>RadioLag Test</h1></body></html>');
 }
 
-test.describe('Radio Sync Extension', () => {
+test.describe('RadioLag Extension', () => {
   /** @type {http.Server} */
   let server;
   let serverUrl;

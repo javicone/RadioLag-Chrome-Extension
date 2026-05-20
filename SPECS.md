@@ -1,4 +1,4 @@
-# SPECS — Radio Sync Extension
+# SPECS — RadioLag Extension
 
 ## 1. Visión General
 

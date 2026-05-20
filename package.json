@@ -1,5 +1,5 @@
 {
-  "name": "radio-sync-extension",
+  "name": "radiolag-extension",
   "version": "1.0.0",
   "main": "content.js",
   "scripts": {},

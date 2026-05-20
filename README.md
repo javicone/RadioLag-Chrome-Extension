@@ -1,4 +1,4 @@
-# Radio Sync
+# RadioLag
 
 Extensión de Chrome que reproduce emisoras de radio en vivo en cualquier página web y sincroniza el audio con contenido de vídeo mediante control de retraso.
 
@@ -6,6 +6,7 @@ Extensión de Chrome que reproduce emisoras de radio en vivo en cualquier págin
 
 - **Cadena SER** — stream en directo (StreamTheWorld CDN)
 - **COPE** — stream en directo (Flumotion CDN)
+  > ⏱️ COPE usa balanceadores de carga que devuelven un archivo `.m3u`. La extensión resuelve automáticamente el servidor disponible, lo que puede añadir unos segundos extra de carga inicial.
 
 ## Instalación
 
