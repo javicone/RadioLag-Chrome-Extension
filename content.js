@@ -1,132 +1,200 @@
-// Estado de la extensión
+// ============================================================
+// CONFIGURACIÓN DE EMISORAS
+// ============================================================
+const STATIONS = {
+  ser: {
+    id: 'ser',
+    name: 'Cadena SER',
+    shortName: 'SER',
+    streamUrl: 'https://19983.live.streamtheworld.com/CADENASERAAC_SC',
+    color: '#dc3545',
+    colorHover: '#c82333',
+    colorPlaying: '#28a745',
+    icon: '📻',
+    iconPlaying: '🔊'
+  },
+  cope: {
+    id: 'cope',
+    name: 'COPE',
+    shortName: 'COPE',
+    streamUrl: '',
+    color: '#1a5276',
+    colorHover: '#154360',
+    colorPlaying: '#28a745',
+    icon: '🎙️',
+    iconPlaying: '🔊'
+  }
+};
+
+// ============================================================
+// ESTADO
+// ============================================================
 let audioCtx;
 let source;
 let delayNode;
-let isRadioActive = false;
+let isPlaying = false;
 let radioAudio = null;
 let useWebAudioAPI = false;
 let shadowRoot = null;
+let mediaObserver = null;
+let currentStation = null;
 
-const STREAM_URL = 'https://19983.live.streamtheworld.com/CADENASERAAC_SC';
+// ============================================================
+// HELPERS
+// ============================================================
+const getStation = () => currentStation ? STATIONS[currentStation] : null;
 
-// Crear el elemento de audio bajo demanda
-const createRadioAudio = () => {
+const updateStatus = (text) => {
+  if (!shadowRoot) return;
+  const statusEl = shadowRoot.getElementById('radio-ser-status');
+  if (statusEl) statusEl.textContent = text;
+};
+
+const updateFloatingButton = () => {
+  const btn = shadowRoot?.getElementById('radio-ser-btn');
+  if (!btn) return;
+  const station = getStation();
+  if (station) {
+    btn.style.background = isPlaying
+      ? `linear-gradient(135deg, ${station.colorPlaying}, ${station.color})`
+      : `linear-gradient(135deg, ${station.color}, #ffd65a)`;
+    btn.innerHTML = `<span class="radio-icon">${isPlaying ? station.iconPlaying : station.icon}</span> ${station.shortName}`;
+    btn.title = isPlaying ? `${station.name} — Reproduciendo` : station.name;
+    btn.classList.toggle('playing', isPlaying);
+  } else {
+    btn.style.background = 'linear-gradient(135deg, #ffd65a, #ff9a3c)';
+    btn.innerHTML = '<span class="radio-icon">📻</span> Radio';
+    btn.title = 'Abrir radio';
+    btn.classList.remove('playing');
+  }
+};
+
+const updateControlPanel = () => {
+  if (!shadowRoot) return;
+  const station = getStation();
+  if (!station) return;
+  const nameEl = shadowRoot.getElementById('station-name');
+  if (nameEl) nameEl.textContent = station.name;
+  updateFloatingButton();
+};
+
+// ============================================================
+// AUDIO — GESTIÓN DEL GRAPO
+// ============================================================
+const destroyAudioGraph = () => {
+  if (source) {
+    try { source.disconnect(); } catch (e) { /* ignore */ }
+    source = null;
+  }
+  if (delayNode) {
+    try { delayNode.disconnect(); } catch (e) { /* ignore */ }
+    delayNode = null;
+  }
+  if (audioCtx) {
+    audioCtx.close();
+    audioCtx = null;
+  }
+  useWebAudioAPI = false;
+};
+
+const createRadioAudio = (stationId) => {
+  destroyAudioGraph();
+
   if (radioAudio) {
     radioAudio.pause();
     radioAudio.removeAttribute('src');
     radioAudio.load();
-    // Si había un source conectado, desconectar
-    if (source) {
-      try { source.disconnect(); } catch(e) {}
-      source = null;
-    }
-    if (delayNode) {
-      try { delayNode.disconnect(); } catch(e) {}
-      delayNode = null;
-    }
-    if (audioCtx) {
-      audioCtx.close();
-      audioCtx = null;
-    }
-    useWebAudioAPI = false;
   }
-  
+
+  const station = STATIONS[stationId];
   radioAudio = new Audio();
-  
-  // Eventos de error para debug
-  radioAudio.addEventListener('error', (e) => {
-    console.error('[Radio SER] Error de audio:', radioAudio.error?.message || e);
+  radioAudio.crossOrigin = 'anonymous';
+
+  radioAudio.addEventListener('error', () => {
+    console.error(`[Radio ${station.shortName}] Error de audio:`, radioAudio.error?.message || 'desconocido');
     updateStatus('Error al cargar audio');
   });
-  
+
   radioAudio.addEventListener('playing', () => {
-    console.log('[Radio SER] Audio reproduciéndose');
+    console.log(`[Radio ${station.shortName}] Audio reproduciéndose`);
     updateStatus('Reproduciendo...');
   });
-  
+
   radioAudio.addEventListener('waiting', () => {
-    console.log('[Radio SER] Audio cargando...');
+    console.log(`[Radio ${station.shortName}] Audio cargando...`);
     updateStatus('Cargando...');
   });
-  
+
   radioAudio.addEventListener('stalled', () => {
-    console.log('[Radio SER] Audio estancado, reintentando...');
+    console.log(`[Radio ${station.shortName}] Audio estancado, reintentando...`);
     updateStatus('Reconectando...');
   });
-  
-  radioAudio.src = STREAM_URL;
+
+  radioAudio.src = station.streamUrl;
   radioAudio.load();
-  
+
   return radioAudio;
 };
 
-// Actualizar estado en la UI
-const updateStatus = (text) => {
-  if (!shadowRoot) return;
-  const statusEl = shadowRoot.getElementById('radio-ser-status');
-  if (statusEl) {
-    statusEl.textContent = text;
+const resumeAudioContext = async () => {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try {
+      await audioCtx.resume();
+    } catch (e) {
+      console.warn('[Radio] Error al reanudar AudioContext:', e);
+    }
   }
 };
 
-// Crear botón flotante principal
-const createFloatingButton = () => {
-  const btn = document.createElement('button');
-  btn.id = 'radio-ser-btn';
-  btn.innerHTML = `<span class="radio-icon">📻</span> SER`;
-  btn.title = 'Activar Radio Cadena SER';
-  return btn;
+const setupAudioGraph = (retried = false) => {
+  if (!audioCtx && radioAudio && radioAudio.src) {
+    try {
+      audioCtx = new AudioContext();
+      audioCtx.addEventListener('statechange', () => {
+        if (audioCtx.state === 'suspended' && isPlaying) {
+          audioCtx.resume();
+        }
+      });
+      source = audioCtx.createMediaElementSource(radioAudio);
+      delayNode = audioCtx.createDelay(179);
+      source.connect(delayNode);
+      delayNode.connect(audioCtx.destination);
+      useWebAudioAPI = true;
+      console.log('[Radio] Web Audio API configurada correctamente');
+    } catch (e) {
+      console.error('[Radio] Error al configurar Web Audio API:', e);
+      if (!retried) {
+        setTimeout(() => setupAudioGraph(true), 2000);
+      } else {
+        updateStatus('Error al configurar delay');
+      }
+    }
+  }
 };
 
-// Crear panel de control con slider de delay
-const createControlPanel = () => {
-  const panel = document.createElement('div');
-  panel.id = 'radio-ser-panel';
-  panel.innerHTML = `
-    <div class="panel-header">
-      <span class="live-badge">● EN VIVO</span>
-      <span>Cadena SER</span>
-    </div>
-    <div class="panel-body">
-      <label class="delay-label">
-        Retraso: <strong id="delay-value">0</strong> segundos
-      </label>
-      <input type="range" id="delay-slider" min="0" max="179" value="0" step="0.1">
-      <small class="hint">Ajusta el retraso para sincronizar con el vídeo</small>
-      <div id="radio-ser-status" class="status">Listo</div>
-      <div class="buttons">
-        <button id="btn-play-pause" class="btn-play">▶ Reproducir</button>
-        <button id="btn-close-radio" class="btn-close-panel">✕</button>
-      </div>
-    </div>
-  `;
-  return panel;
-};
-
-// Silenciar todos los elementos de audio/vídeo de la página
-let mediaObserver = null;
-
+// ============================================================
+// SILENCIADO AUTOMÁTICO DE PÁGINA
+// ============================================================
 const mutePageMedia = (mute = true) => {
   const mediaElements = document.querySelectorAll('audio, video');
-  mediaElements.forEach(element => {
-    if (element === radioAudio) return; // No mutear nuestra propia radio
+  mediaElements.forEach((el) => {
+    if (el === radioAudio) return;
     if (mute) {
-      element.muted = true;
-      element.dataset.wasMutedBySER = 'true';
-    } else if (element.dataset.wasMutedBySER === 'true') {
-      element.muted = false;
-      delete element.dataset.wasMutedBySER;
+      el.muted = true;
+      el.dataset.wasMutedByRadio = 'true';
+    } else if (el.dataset.wasMutedByRadio === 'true') {
+      el.muted = false;
+      delete el.dataset.wasMutedByRadio;
     }
   });
-  
-  // Observar nuevos elementos multimedia que se añadan (ej: Twitch crea videos dinámicamente)
+
   if (mute && !mediaObserver) {
     mediaObserver = new MutationObserver(() => {
-      document.querySelectorAll('audio, video').forEach(el => {
+      document.querySelectorAll('audio, video').forEach((el) => {
         if (el === radioAudio) return;
-        if (!el.dataset.wasMutedBySER) {
+        if (!el.dataset.wasMutedByRadio) {
           el.muted = true;
-          el.dataset.wasMutedBySER = 'true';
+          el.dataset.wasMutedByRadio = 'true';
         }
       });
     });
@@ -137,284 +205,266 @@ const mutePageMedia = (mute = true) => {
   }
 };
 
-// Configurar el grafo de audio Web Audio API (solo cuando se necesita delay)
-const setupAudioGraph = () => {
-  if (!audioCtx && radioAudio) {
-    try {
-      // Para usar Web Audio API necesitamos CORS
-      radioAudio.crossOrigin = 'anonymous';
-      // Recargar con CORS habilitado
-      const currentTime = radioAudio.currentTime;
-      const wasPlaying = !radioAudio.paused;
-      radioAudio.src = STREAM_URL;
-      radioAudio.load();
-      
-      audioCtx = new AudioContext();
-      source = audioCtx.createMediaElementSource(radioAudio);
-      delayNode = audioCtx.createDelay(179); // Máximo ~3 minutos de buffer
-      
-      // Conexión: Radio -> Retraso -> Altavoces
-      source.connect(delayNode);
-      delayNode.connect(audioCtx.destination);
-      useWebAudioAPI = true;
-      
-      if (wasPlaying) {
-        radioAudio.play().catch(e => console.error('[Radio SER] Error al reproducir tras setup:', e));
-      }
-      
-      console.log('[Radio SER] Web Audio API configurada correctamente');
-    } catch (e) {
-      console.error('[Radio SER] Error al configurar Web Audio API:', e);
-      updateStatus('Error al configurar delay');
-    }
+// ============================================================
+// CAMBIO DE EMISORA EN CALIENTE
+// ============================================================
+const switchStation = (newStationId) => {
+  const wasPlaying = isPlaying;
+  const delaySlider = shadowRoot?.getElementById('delay-slider');
+  const delayVal = delaySlider ? parseFloat(delaySlider.value) : 0;
+
+  // 1. Pausar audio actual
+  if (radioAudio) radioAudio.pause();
+
+  // 2-3. Limpiar nodos Web Audio API
+  destroyAudioGraph();
+
+  // 4. Crear nuevo Audio con el nuevo stream URL
+  currentStation = newStationId;
+  createRadioAudio(newStationId);
+
+  // 5. Restaurar delay si estaba activo
+  if (delayVal > 0) {
+    setupAudioGraph();
+    if (delayNode) delayNode.delayTime.value = delayVal;
   }
+
+  // 6. Reanudar si estaba reproduciendo
+  isPlaying = wasPlaying;
+  const led = shadowRoot?.getElementById('radio-led');
+  if (led) led.classList.toggle('active', wasPlaying);
+  if (wasPlaying) {
+    resumeAudioContext().then(() => {
+      radioAudio.play().catch((e) => console.error('[Radio] Error al reanudar:', e));
+    });
+  }
+
+  updateFloatingButton();
+  updateControlPanel();
 };
 
-// Inicializar la extensión
+// ============================================================
+// UI — CREACIÓN DE COMPONENTES
+// ============================================================
+const createFloatingButton = () => {
+  const btn = document.createElement('button');
+  btn.id = 'radio-ser-btn';
+  btn.innerHTML = '<span class="radio-icon">📻</span> Radio';
+  btn.title = 'Abrir radio';
+  return btn;
+};
+
+const createSelectorPanel = () => {
+  const panel = document.createElement('div');
+  panel.id = 'radio-ser-selector';
+  panel.innerHTML = `
+    <div class="selector-title">Elige tu emisora</div>
+    <div class="selector-buttons">
+      <button class="station-btn" data-station="ser" style="--station-color: ${STATIONS.ser.color}; --station-hover: ${STATIONS.ser.colorHover};">
+        <span class="station-icon">${STATIONS.ser.icon}</span>
+        <span class="station-name">${STATIONS.ser.name}</span>
+        <span class="station-short">${STATIONS.ser.shortName}</span>
+      </button>
+      <button class="station-btn" data-station="cope" style="--station-color: ${STATIONS.cope.color}; --station-hover: ${STATIONS.cope.colorHover};">
+        <span class="station-icon">${STATIONS.cope.icon}</span>
+        <span class="station-name">${STATIONS.cope.name}</span>
+        <span class="station-short">${STATIONS.cope.shortName}</span>
+      </button>
+    </div>
+  `;
+  return panel;
+};
+
+const createControlPanel = () => {
+  const panel = document.createElement('div');
+  panel.id = 'radio-ser-panel';
+  panel.innerHTML = `
+    <div class="panel-header">
+      <span class="live-badge">● EN VIVO</span>
+      <span id="station-name">—</span>
+    </div>
+    <div class="panel-body">
+      <label class="delay-label">
+        Retraso: <strong id="delay-value">0</strong> segundos
+      </label>
+      <input type="range" id="delay-slider" min="0" max="179" value="0" step="0.1">
+      <div class="status-row">
+        <span class="led" id="radio-led"></span>
+        <span id="radio-ser-status" class="status">Listo</span>
+      </div>
+      <div class="buttons">
+        <button id="btn-play-pause" class="btn-play">▶ Reproducir</button>
+        <button id="btn-change-station" class="btn-change">Cambiar</button>
+        <button id="btn-close-radio" class="btn-close-panel">✕</button>
+      </div>
+    </div>
+  `;
+  return panel;
+};
+
+// ============================================================
+// UI — FLUJO DE PANTALLAS
+// ============================================================
+const showFloatingButton = () => {
+  const btn = shadowRoot?.getElementById('radio-ser-btn');
+  const panel = shadowRoot?.getElementById('radio-ser-panel');
+  const selector = shadowRoot?.getElementById('radio-ser-selector');
+  if (btn) btn.style.display = 'flex';
+  if (panel) panel.style.display = 'none';
+  if (selector) selector.style.display = 'none';
+  updateFloatingButton();
+};
+
+const showSelector = () => {
+  const btn = shadowRoot?.getElementById('radio-ser-btn');
+  const panel = shadowRoot?.getElementById('radio-ser-panel');
+  const selector = shadowRoot?.getElementById('radio-ser-selector');
+  if (btn) btn.style.display = 'none';
+  if (panel) panel.style.display = 'none';
+  if (selector) selector.style.display = 'block';
+};
+
+const showControlPanel = () => {
+  const btn = shadowRoot?.getElementById('radio-ser-btn');
+  const panel = shadowRoot?.getElementById('radio-ser-panel');
+  const selector = shadowRoot?.getElementById('radio-ser-selector');
+  if (btn) btn.style.display = 'none';
+  if (panel) panel.style.display = 'block';
+  if (selector) selector.style.display = 'none';
+  updateControlPanel();
+};
+
+// ============================================================
+// INICIALIZACIÓN
+// ============================================================
 const init = () => {
-  // Crear contenedor Shadow DOM (aislado del CSS de la página)
   const host = document.createElement('div');
   host.id = 'radio-ser-host';
   document.body.appendChild(host);
   shadowRoot = host.attachShadow({ mode: 'open' });
-  
-  // Estilos encapsulados dentro del Shadow DOM
+
+  // --- ESTILOS VINTAGE (cargados desde styles.css) ---
   const style = document.createElement('style');
-  style.textContent = `
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    #radio-ser-btn {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 999999;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 20px;
-      border: none;
-      border-radius: 50px;
-      background: #dc3545;
-      color: white;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      transition: all 0.3s ease;
-    }
-    #radio-ser-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(220,53,69,0.4);
-      background: #c82333;
-    }
-    #radio-ser-btn.playing {
-      background: #28a745;
-      box-shadow: 0 4px 12px rgba(40,167,69,0.4);
-    }
-    #radio-ser-btn.playing:hover {
-      background: #218838;
-      box-shadow: 0 6px 20px rgba(40,167,69,0.5);
-    }
-    .radio-icon { font-size: 18px; }
-
-    #radio-ser-panel {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 999999;
-      width: 300px;
-      max-width: calc(100vw - 40px);
-      background: #1a1a2e;
-      color: #eee;
-      border-radius: 12px;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 14px;
-      animation: slideIn 0.3s ease-out;
-      overflow: hidden;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 16px;
-      background: #16213e;
-      font-weight: 600;
-    }
-    .live-badge {
-      color: #ff4444;
-      font-size: 12px;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    .panel-body {
-      padding: 14px 16px;
-    }
-    .delay-label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 13px;
-      color: #ccc;
-    }
-    .delay-label strong { color: #fff; }
-
-    input[type="range"] {
-      width: 100%;
-      height: 6px;
-      -webkit-appearance: none;
-      appearance: none;
-      background: #333;
-      border-radius: 3px;
-      outline: none;
-      margin: 8px 0;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      background: #dc3545;
-      border-radius: 50%;
-      cursor: pointer;
-    }
-
-    .hint { display: block; color: #888; font-size: 11px; margin-bottom: 8px; }
-    .status { color: #aaa; font-size: 12px; margin-bottom: 10px; }
-
-    .buttons {
-      display: flex;
-      gap: 8px;
-    }
-    .btn-play {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      background: #28a745;
-      color: white;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .btn-play:hover { background: #218838; }
-    .btn-play.playing {
-      background: #ffc107;
-      color: #333;
-    }
-    .btn-play.playing:hover { background: #e0a800; }
-
-    .btn-close-panel {
-      padding: 10px 14px;
-      border: 1px solid #555;
-      border-radius: 8px;
-      background: transparent;
-      color: #ccc;
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .btn-close-panel:hover {
-      background: #dc3545;
-      border-color: #dc3545;
-      color: white;
-    }
-
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-  `;
+  const cssUrl = chrome.runtime.getURL('styles.css');
+  fetch(cssUrl)
+    .then((r) => r.text())
+    .then((css) => { style.textContent = css; })
+    .catch(() => {
+      style.textContent = 'body { font-family: Georgia, serif; }';
+    });
   shadowRoot.appendChild(style);
-  
+
+  // --- ELEMENTOS ---
   const floatingBtn = createFloatingButton();
+  const selectorPanel = createSelectorPanel();
   const controlPanel = createControlPanel();
-  controlPanel.style.display = 'none';
+
   shadowRoot.appendChild(floatingBtn);
+  shadowRoot.appendChild(selectorPanel);
   shadowRoot.appendChild(controlPanel);
-  
-  // Evento del botón flotante
+
+  selectorPanel.style.display = 'none';
+  controlPanel.style.display = 'none';
+
+  // --- EVENTOS ---
+
+  // Botón flotante
   floatingBtn.addEventListener('click', () => {
-    isRadioActive = true;
-    controlPanel.style.display = 'block';
-    floatingBtn.style.display = 'none';
+    if (currentStation) {
+      showControlPanel();
+    } else {
+      showSelector();
+    }
   });
-  
-  // Evento del slider de delay
+
+  // Selector de emisoras
+  selectorPanel.querySelectorAll('.station-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const stationId = btn.dataset.station;
+      if (currentStation && currentStation !== stationId) {
+        switchStation(stationId);
+      } else {
+        currentStation = stationId;
+        createRadioAudio(stationId);
+      }
+      showControlPanel();
+    });
+  });
+
+  // Slider de delay
   shadowRoot.getElementById('delay-slider').addEventListener('input', (e) => {
     const delayValue = parseFloat(e.target.value);
     shadowRoot.getElementById('delay-value').textContent = delayValue.toFixed(1);
-    
-    // Si el usuario ajusta delay > 0 y aún no hay Web Audio API, configurarla
-    if (delayValue > 0 && !useWebAudioAPI) {
+
+    if (delayValue > 0 && !useWebAudioAPI && radioAudio && radioAudio.src) {
       setupAudioGraph();
     }
-    
+
     if (delayNode) {
       delayNode.delayTime.value = delayValue;
     }
   });
-  
-  // Evento del botón play/pause
+
+  // Play / Pause
   shadowRoot.getElementById('btn-play-pause').addEventListener('click', async () => {
+    const station = getStation();
+    if (!station || !radioAudio) return;
     const playPauseBtn = shadowRoot.getElementById('btn-play-pause');
-    
+
     try {
-      // Crear audio si no existe
-      if (!radioAudio) {
-        createRadioAudio();
-      }
-      
-      // Si usa Web Audio API, asegurar que el contexto esté activo
-      if (audioCtx && audioCtx.state === 'suspended') {
-        await audioCtx.resume();
-      }
-      
+      await resumeAudioContext();
+
       if (radioAudio.paused) {
         updateStatus('Conectando...');
         mutePageMedia(true);
         await radioAudio.play();
+        isPlaying = true;
         playPauseBtn.innerHTML = '⏸ Pausar';
         playPauseBtn.className = 'btn-play playing';
-        floatingBtn.classList.add('playing');
+        shadowRoot.getElementById('radio-led')?.classList.add('active');
+        updateFloatingButton();
       } else {
         radioAudio.pause();
         mutePageMedia(false);
+        isPlaying = false;
         updateStatus('Pausado');
         playPauseBtn.innerHTML = '▶ Reproducir';
         playPauseBtn.className = 'btn-play';
-        floatingBtn.classList.remove('playing');
+        shadowRoot.getElementById('radio-led')?.classList.remove('active');
+        updateFloatingButton();
       }
     } catch (err) {
-      console.error('[Radio SER] Error al reproducir:', err);
+      console.error('[Radio] Error al reproducir:', err);
       updateStatus('Error: ' + err.message);
     }
   });
-  
-  // Evento del botón cerrar (solo oculta el panel, no detiene el audio)
+
+  // Cambiar emisora
+  shadowRoot.getElementById('btn-change-station').addEventListener('click', () => {
+    if (isPlaying && radioAudio) {
+      radioAudio.pause();
+      mutePageMedia(false);
+      isPlaying = false;
+      shadowRoot.getElementById('radio-led')?.classList.remove('active');
+      const playBtn = shadowRoot.getElementById('btn-play-pause');
+      if (playBtn) {
+        playBtn.innerHTML = '▶ Reproducir';
+        playBtn.className = 'btn-play';
+      }
+    }
+    showSelector();
+  });
+
+  // Cerrar (oculta panel, mantiene audio en segundo plano)
   shadowRoot.getElementById('btn-close-radio').addEventListener('click', () => {
-    isRadioActive = false;
-    controlPanel.style.display = 'none';
-    floatingBtn.style.display = 'flex';
-    
-    // Actualizar el botón flotante para indicar si está sonando
+    showFloatingButton();
     if (radioAudio && !radioAudio.paused) {
-      floatingBtn.innerHTML = `<span class="radio-icon">🔊</span> SER`;
-      floatingBtn.classList.add('playing');
-    } else {
-      floatingBtn.innerHTML = `<span class="radio-icon">📻</span> SER`;
-      floatingBtn.classList.remove('playing');
+      updateFloatingButton();
     }
   });
 };
 
-// Esperar a que el DOM esté listo
+// --- ARRANQUE ---
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
