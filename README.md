@@ -36,7 +36,8 @@ Al reproducir la radio, silencia todos los `<audio>` y `<video>` de la página. 
 - No recarga el stream al activar el delay
 - Reintento automático si falla la configuración
 
-### Diseño vintage
+### Diseño cartoon-vintage
+- Estilo cartoon con inspiración vintage
 - Paleta crema, madera y latón
 - Tipografía Playfair Display + Georgia
 - LED rojo pulsante con glow
@@ -61,7 +62,7 @@ Resuelve archivos `.m3u` automáticamente para obtener la URL directa del stream
 ```
 ├── manifest.json
 ├── content.js          # Lógica y UI (Shadow DOM)
-├── styles.css          # Estilos vintage
+├── styles.css          # Estilos cartoon-vintage
 ├── icons/
 │   ├── icon16.png
 │   └── icon48.png
