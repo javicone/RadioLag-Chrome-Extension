@@ -1,6 +1,6 @@
 # RadioLag
 
-Extensión de Chrome que reproduce emisoras de radio en vivo en cualquier página web y sincroniza el audio con contenido de vídeo mediante control de retraso.
+Extensión de Chrome que reproduce emisoras de radio en vivo en cualquier página web y sincroniza el audio con contenido de vídeo mediante control de retraso. Ideal para ver competiciones deportivas en directo en Español ;)
 
 ## Emisoras disponibles
 
